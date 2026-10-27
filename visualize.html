@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step visualization of the constant-time u64 decimal digit counter using log2 and 77/256.">
+<title>Digits via log2 — Algorithm 1 Visualizer</title>
+<style>
+:root {
+  --bg: #060a12;
+  --panel: rgba(15, 23, 40, .78);
+  --panel-strong: rgba(19, 29, 50, .92);
+  --line: rgba(148, 163, 184, .16);
+  --line-strong: rgba(94, 234, 212, .34);
+  --text: #eaf1ff;
+  --muted: #91a2bf;
+  --faint: #5c6c86;
+  --accent: #5eead4;
+  --accent-soft: rgba(94, 234, 212, .12);
+  --lime: #a3e635;
+  --lime-soft: rgba(163, 230, 53, .11);
+  --pink: #f472b6;
+  --danger: #fb7185;
+  --danger-soft: rgba(251, 113, 133, .10);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --radius: 18px;
+}
+
+* { box-sizing: border-box; }
+
+html { color-scheme: dark; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  background:
+    radial-gradient(1000px 620px at 12% -8%, rgba(94, 234, 212, .13), transparent 62%),
+    radial-gradient(900px 560px at 98% 2%, rgba(129, 140, 248, .11), transparent 58%),
+    radial-gradient(700px 500px at 55% 110%, rgba(244, 114, 182, .06), transparent 65%),
+    var(--bg);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, .045) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 10%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 10%, transparent 78%);
+  z-index: 0;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  width: min(1220px, 100%);
+  margin: 0 auto;
+  padding: 36px 24px 28px;
+}
+
+h1, h2, p { margin: 0; }
+
+code, kbd, .mono { font-family: var(--mono); }
+
+code {
+  color: #c9fff4;
+  font-size: .92em;
+}
+
+[hidden] { display: none !important; }
+
+::selection { background: rgba(94, 234, 212, .28); color: #fff; }
+
+/* Scrollbars */
+* { scrollbar-width: thin; scrollbar-color: rgba(94, 234, 212, .28) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(94, 234, 212, .25); border-radius: 99px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Shared card */
+.card {
+  background: linear-gradient(180deg, var(--panel-strong), rgba(9, 14, 26, .90));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .36),
+    inset 0 1px 0 rgba(255, 255, 255, .045);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Buttons */
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(148, 163, 184, .06);
+  color: var(--text);
+  border-radius: 11px;
+  padding: 10px 15px;
+  font: 600 13px/1 var(--sans);
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease, color .18s ease;
+  white-space: nowrap;
+}
+.btn:hover { background: rgba(148, 163, 184, .12); border-color: rgba(148, 163, 184, .28); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.btn:disabled { opacity: .32; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  color: #032b26;
+  background: linear-gradient(135deg, #7ff7e4, #5eead4 55%, #2dd4bf);
+  border-color: transparent;
+  box-shadow: 0 8px 26px rgba(45, 212, 191, .24);
+}
+.btn-primary:hover { background: linear-gradient(135deg, #a7fff0, #7ff7e4 55%, #5eead4); border-color: transparent; }
+
+.btn-play {
+  color: #052e2b;
+  background: linear-gradient(135deg, #bef264, #a3e635);
+  border-color: transparent;
+  min-width: 94px;
+  box-shadow: 0 8px 26px rgba(163, 230, 53, .18);
+}
+.btn-play:hover { background: linear-gradient(135deg, #d4ff7d, #bef264); border-color: transparent; }
+.btn-play.is-playing {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+
+.btn-icon { width: 40px; padding: 10px 0; text-align: center; font-size: 15px; }
+.btn-ghost { background: transparent; color: var(--muted); }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+.shake { animation: shake .38s ease; }
+
+/* ---------- Hero ---------- */
+.hero { max-width: 830px; padding: 12px 0 26px; }
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font: 700 10px/1 var(--sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.dot-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(94, 234, 212, .45);
+  animation: livePulse 2.4s infinite;
+}
+
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(94, 234, 212, .42); }
+  70% { box-shadow: 0 0 0 8px rgba(94, 234, 212, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(94, 234, 212, 0); }
+}
+
+h1 {
+  font-size: clamp(2.2rem, 5.2vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -.045em;
+  font-weight: 760;
+  background: linear-gradient(110deg, #fff 10%, #dffef8 42%, #8ff3e2 74%, #a3e635 110%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lede {
+  margin-top: 16px;
+  max-width: 690px;
+  color: var(--muted);
+  font-size: 15.5px;
+  line-height: 1.65;
+}
+
+.hero-formula {
+  margin-top: 18px;
+  display: inline-block;
+  max-width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(94, 234, 212, .045);
+  color: #b9fff3;
+  font-size: 12.5px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* ---------- Input ---------- */
+.input-panel { padding: 20px; margin-bottom: 22px; }
+
+.input-panel label {
+  display: block;
+  color: var(--muted);
+  font: 700 10px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .13em;
+  margin-bottom: 10px;
+}
+
+.input-row { display: flex; gap: 10px; }
+
+#value-input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(3, 7, 18, .55);
+  color: var(--text);
+  font: 600 16px/1 var(--mono);
+  letter-spacing: .01em;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+#value-input::placeholder { color: var(--faint); font-weight: 400; }
+#value-input:hover { border-color: rgba(148, 163, 184, .3); }
+#value-input:focus {
+  outline: none;
+  border-color: rgba(94, 234, 212, .55);
+  background: rgba(3, 7, 18, .78);
+  box-shadow: 0 0 0 4px rgba(94, 234, 212, .10);
+}
+#value-input.is-invalid { border-color: rgba(251, 113, 133, .65); box-shadow: 0 0 0 4px rgba(251, 113, 133, .09); }
+
+.hint-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  margin-top: 9px;
+  min-height: 18px;
+  font-size: 11px;
+  color: var(--faint);
+}
+.hint-row code { color: var(--muted); font-size: 11px; }
+.error { color: #fda4af; font-weight: 600; text-align: right; }
+
+.examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.examples-label {
+  color: var(--faint);
+  font: 700 9px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  margin-right: 3px;
+}
+.examples button {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 10px;
+  font: 500 11px/1 var(--mono);
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.examples button:hover { color: var(--accent); border-color: rgba(94, 234, 212, .4); background: var(--accent-soft); }
+.examples button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Layout ---------- */
+.viz {
+  display: grid;
+  grid-template-columns: minmax(330px, 410px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* ---------- Inspector ---------- */
+.inspector {
+  position: sticky;
+  top: 16px;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.kicker {
+  display: inline-grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(94, 234, 212, .24);
+  color: var(--accent);
+  font: 700 12px/1 var(--mono);
+}
+.card-sub { color: var(--muted); font-size: 11px; }
+.fit-badge {
+  margin-left: auto;
+  border: 1px solid rgba(163, 230, 53, .24);
+  background: var(--lime-soft);
+  color: var(--lime);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font: 700 9px/1 var(--sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.value-display {
+  font: 700 clamp(1.45rem, 3.1vw, 2.15rem)/1.12 var(--mono);
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+  background: linear-gradient(100deg, #ffffff, #c8fff6 58%, #93f7e6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding-bottom: 3px;
+}
+.value-display.is-long {
+  font-size: clamp(.98rem, 2.4vw, 1.65rem);
+  letter-spacing: -.02em;
+}
+
+.value-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 13px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--line);
+}
+.value-meta div { min-width: 0; }
+.value-meta span {
+  display: block;
+  color: var(--faint);
+  font: 700 9px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .13em;
+  margin-bottom: 5px;
+}
+.value-meta code { display: block; overflow-wrap: anywhere; color: var(--muted); font-size: 11px; }
+
+/* ---------- 64-bit binary ---------- */
+.bits-block { padding: 15px 0 14px; border-bottom: 1px solid var(--line); }
+.bits-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--faint);
+  font: 700 9px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  margin-bottom: 9px;
+}
+.bits { display: grid; gap: 5px; }
+
+.bit-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 20px;
+  gap: 4px;
+  align-items: center;
+}
+.bit-idx {
+  color: var(--faint);
+  font: 500 8px/1 var(--mono);
+  text-align: center;
+  opacity: .75;
+}
+.bit-cells { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; }
+
+.bit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 21px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, .055);
+  color: rgba(226, 232, 240, .40);
+  font: 600 10px/1 var(--mono);
+  transition: background .25s ease, color .25s ease, border-color .25s ease, transform .25s ease, box-shadow .25s ease;
+}
+.bit.is-one { background: rgba(94, 234, 212, .13); color: #8ffff0; border-color: rgba(94, 234, 212, .17); }
+.bit.is-leading { background: rgba(148, 163, 184, .045); color: rgba(226, 232, 240, .30); }
+.bit.is-highest {
+  background: var(--accent);
+  color: #032a25;
+  border-color: #b8fff5;
+  box-shadow: 0 0 0 2px rgba(94, 234, 212, .13), 0 0 15px rgba(94, 234, 212, .38);
+  transform: translateY(-1px);
+}
+.bits.is-zero-value .bit { opacity: .42; }
+
+.inspector[data-phase="clz"] .bit.is-leading {
+  animation: zeroScan .48s ease both;
+  animation-delay: calc(var(--i) * 14ms);
+}
+.inspector[data-phase="clz"] .bit.is-highest { animation: highestPop .9s ease both; }
+.inspector[data-phase="zero"] .bits.is-zero-value .bit { animation: zeroGlow 1.1s ease both; }
+
+@keyframes zeroScan {
+  0% { background: rgba(148, 163, 184, .045); color: rgba(226, 232, 240, .3); transform: scale(1); }
+  42% { background: rgba(94, 234, 212, .22); color: #eafffb; transform: scale(1.12); }
+  100% { background: rgba(94, 234, 212, .07); color: rgba(143, 255, 240, .62); transform: scale(1); }
+}
+@keyframes highestPop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.22); box-shadow: 0 0 0 6px rgba(94, 234, 212, .18), 0 0 26px rgba(94, 234, 212, .58); }
+  100% { transform: translateY(-1px) scale(1); }
+}
+@keyframes zeroGlow {
+  0% { opacity: .35; }
+  50% { opacity: .9; background: rgba(94, 234, 212, .1); }
+  100% { opacity: .42; }
+}
+
+.bit-legend { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 9px; color: var(--faint); font-size: 9px; }
+.bit-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
+.swatch.leading { background: rgba(148, 163, 184, .2); border: 1px solid rgba(148, 163, 184, .22); }
+.swatch.highest { background: var(--accent); box-shadow: 0 0 8px rgba(94, 234, 212, .5); }
+
+/* ---------- Metrics ---------- */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 14px;
+}
+.metric {
+  min-width: 0;
+  padding: 8px 5px 7px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, .04);
+  text-align: center;
+  transition: background .25s ease, border-color .25s ease, transform .25s ease;
+}
+.metric span {
+  display: block;
+  color: var(--faint);
+  font: 700 7.5px/1.15 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  white-space: nowrap;
+}
+.metric strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--faint);
+  font: 700 13px/1 var(--mono);
+  transition: color .25s ease;
+}
+.metric.is-revealed { background: rgba(94, 234, 212, .065); border-color: rgba(94, 234, 212, .13); }
+.metric.is-revealed strong { color: var(--accent); }
+.metric[data-metric="digits"].is-revealed { background: var(--lime-soft); border-color: rgba(163, 230, 53, .2); }
+.metric[data-metric="digits"].is-revealed strong { color: var(--lime); }
+
+.inspector-note {
+  margin-top: 12px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.inspector-note code { font-size: 10px; }
+
+/* ---------- Footer ---------- */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 10.5px;
+}
+.footer code { font-size: 10.5px; }
+
+/* ---------- Controls ---------- */
+.timeline-panel { min-width: 0; }
+
+.controls {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  padding: 12px 14px 10px;
+  margin-bottom: 12px;
+}
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.controls-left, .controls-right { display: flex; align-items: center; gap: 7px; }
+.controls-right { gap: 14px; }
+.step-counter {
+  color: var(--muted);
+  font: 600 10.5px/1 var(--mono);
+  white-space: nowrap;
+}
+.speed-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--faint);
+  font: 700 9px/1 var(--sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+#speed {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(3, 7, 18, .6);
+  color: var(--text);
+  padding: 6px 7px;
+  font: 600 11px/1 var(--mono);
+  cursor: pointer;
+}
+#speed:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.progress-track {
+  margin-top: 10px;
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(148, 163, 184, .10);
+  overflow: hidden;
+}
+.progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2dd4bf, var(--accent) 55%, var(--lime));
+  box-shadow: 0 0 12px rgba(94, 234, 212, .5);
+  transition: width .42s cubic-bezier(.2, .75, .25, 1);
+}
+
+/* ---------- Step cards ---------- */
+.steps { display: flex; flex-direction: column; gap: 9px; }
+
+.step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 11px;
+  scroll-margin-top: 84px;
+}
+.step-rail { display: flex; flex-direction: column; align-items: center; }
+.step-marker {
+  position: relative;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(9, 14, 26, .9);
+  color: var(--faint);
+  font: 700 10px/1 var(--mono);
+  transition: background .3s ease, color .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+.step-num { transition: opacity .2s ease; }
+.step.is-done .step-num { display: none; }
+.step.is-done .step-marker::after {
+  content: "✓";
+  font: 700 13px/1 var(--sans);
+  color: var(--accent);
+}
+.step.is-active .step-marker {
+  background: var(--accent);
+  border-color: #c5fff7;
+  color: #032a25;
+  box-shadow: 0 0 0 4px rgba(94, 234, 212, .10), 0 0 18px rgba(94, 234, 212, .32);
+  animation: markerPulse 2s ease infinite;
+}
+.step.is-active .step-num { color: #032a25; }
+.step.is-done .step-marker { background: var(--accent-soft); border-color: rgba(94, 234, 212, .4); }
+@keyframes markerPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(94, 234, 212, .10), 0 0 18px rgba(94, 234, 212, .30); }
+  50% { box-shadow: 0 0 0 7px rgba(94, 234, 212, .04), 0 0 25px rgba(94, 234, 212, .48); }
+}
+
+.step-line {
+  flex: 1;
+  width: 1px;
+  min-height: 10px;
+  margin: 4px 0;
+  background: var(--line);
+  transition: background .3s ease;
+}
+.step.is-done .step-line { background: linear-gradient(180deg, rgba(94, 234, 212, .45), var(--line)); }
+.step:last-child .step-line { display: none; }
+
+.step-card {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(12, 19, 34, .58);
+  transition: background .3s ease, border-color .3s ease, box-shadow .3s ease, opacity .3s ease;
+}
+.step.is-pending .step-card { opacity: .48; }
+.step.is-pending .step-head { cursor: pointer; }
+.step.is-active .step-card {
+  padding: 14px 16px 16px;
+  background: linear-gradient(165deg, rgba(20, 38, 47, .72), rgba(11, 18, 32, .82));
+  border-color: var(--line-strong);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(94, 234, 212, .06);
+}
+.step.is-done .step-card { background: rgba(10, 17, 30, .48); }
+
+.step-head {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.step-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 5px; }
+.step-kicker {
+  display: block;
+  color: var(--faint);
+  font: 700 8px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  margin-bottom: 5px;
+}
+.step.is-active .step-kicker { color: var(--accent); }
+.step-title {
+  display: block;
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -.01em;
+}
+.step.is-pending .step-title { color: var(--muted); }
+
+.step-summary {
+  display: none;
+  margin-top: 4px;
+  color: var(--muted);
+  font: 500 11px/1.4 var(--mono);
+  overflow-wrap: anywhere;
+}
+.step.is-done .step-summary { display: block; }
+
+.step-body { display: none; }
+.step.is-active .step-body {
+  display: block;
+  margin-top: 12px;
+  animation: bodyIn .42s cubic-bezier(.2, .75, .25, 1) both;
+}
+@keyframes bodyIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Step body content ---------- */
+.step-lead { color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.step-lead + * { margin-top: 11px; }
+.note {
+  margin-top: 11px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.62;
+}
+.note code { font-size: 10.5px; }
+.note strong { color: var(--muted); }
+
+.fact-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
+.fact {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(3, 7, 18, .3);
+}
+.fact span {
+  display: block;
+  color: var(--faint);
+  font: 700 8px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin-bottom: 5px;
+}
+.fact code { display: block; color: var(--text); font-size: 11px; overflow-wrap: anywhere; }
+
+.check-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.check-row code { font-size: 12.5px; }
+.bool {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: 700 10px/1 var(--mono);
+}
+.bool.true { color: var(--lime); background: var(--lime-soft); border-color: rgba(163, 230, 53, .25); }
+.bool.false { color: #fbbf24; background: rgba(251, 191, 36, .08); border-color: rgba(251, 191, 36, .20); }
+
+.formula-line { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.formula-chip {
+  flex: 1 1 130px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(3, 7, 18, .34);
+}
+.formula-chip span {
+  display: block;
+  color: var(--faint);
+  font: 700 8px/1 var(--sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.formula-chip strong { color: var(--text); font: 700 22px/1 var(--mono); }
+.formula-chip.accent { border-color: rgba(94, 234, 212, .24); background: var(--accent-soft); }
+.formula-chip.accent strong { color: var(--accent); }
+.formula-arrow { display: grid; place-items: center; color: var(--faint); font-size: 16px; padding: 0 1px; }
+
+.range-box {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(3, 7, 18, .28);
+  font-size: 10.5px;
+}
+.range-box > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.range-box span { color: var(--faint); font-family: var(--mono); }
+.range-box code { color: var(--muted); font-size: 10.5px; }
+.range-mid { color: var(--faint); font-family: var(--mono); }
+
+.calc-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid rgba(94, 234, 212, .45);
+  border-radius: 9px;
+  background: rgba(3, 7, 18, .32);
+}
+.calc-stack > div { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.calc-stack span {
+  flex: 0 0 46px;
+  color: var(--faint);
+  font: 700 8px/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.calc-stack code { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.calc-stack strong { color: var(--accent); font-weight: 700; }
+
+.lookup-highlight {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid rgba(94, 234, 212, .24);
+  border-radius: 9px;
+  background: var(--accent-soft);
+}
+.lookup-label { color: var(--accent); font: 700 9px/1 var(--mono); }
+.lookup-highlight code { color: #d7fff9; font-size: 12px; overflow-wrap: anywhere; }
+
+.pow-table {
+  position: relative;
+  max-height: 224px;
+  margin-top: 10px;
+  padding: 4px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(3, 7, 18, .42);
+}
+.pow-row {
+  display: grid;
+  grid-template-columns: 50px 55px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 7px;
+  border-radius: 6px;
+  color: var(--faint);
+  font-size: 10px;
+  transition: background .2s ease, color .2s ease;
+}
+.pow-row + .pow-row { border-top: 1px solid rgba(148, 163, 184, .055); }
+.pow-a, .pow-exp { font-family: var(--mono); white-space: nowrap; }
+.pow-row code { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.pow-row.is-selected {
+  background: linear-gradient(90deg, rgba(94, 234, 212, .16), rgba(94, 234, 212, .045));
+  color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  animation: rowGlow 1.5s ease;
+}
+.pow-row.is-selected code { color: #d8fff9; font-weight: 600; }
+@keyframes rowGlow {
+  0% { background-color: rgba(94, 234, 212, .32); }
+  100% { background-color: transparent; }
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(3, 7, 18, .3);
+}
+.compare-value { min-width: 0; }
+.compare-value span {
+  display: block;
+  color: var(--faint);
+  font: 700 8px/1 var(--sans);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.compare-value code { display: block; color: var(--text); font-size: 11.5px; overflow-wrap: anywhere; }
+.compare-op {
+  min-width: 34px;
+  text-align: center;
+  color: var(--accent);
+  font: 700 24px/1 var(--mono);
+  animation: opPop .55s cubic-bezier(.2, .8, .2, 1.2) both;
+}
+.compare-op.is-false { color: #fbbf24; }
+@keyframes opPop {
+  0% { opacity: 0; transform: scale(.4) rotate(-8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.result-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 0 9px;
+}
+.result-number {
+  color: var(--lime);
+  font: 800 clamp(2.8rem, 6vw, 4.2rem)/.9 var(--mono);
+  letter-spacing: -.06em;
+  text-shadow: 0 0 28px rgba(163, 230, 53, .26);
+  animation: resultPop .75s cubic-bezier(.2, .8, .2, 1.25) both;
+}
+@keyframes resultPop {
+  0% { opacity: 0; transform: scale(.55) translateY(6px); filter: blur(5px); }
+  60% { opacity: 1; transform: scale(1.06) translateY(0); filter: blur(0); }
+  100% { transform: scale(1); }
+}
+.result-label {
+  color: var(--muted);
+  font: 700 10px/1 var(--sans);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.verify-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 10px;
+}
+.verify-row > span:first-child { text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
+.verify-row code { color: var(--muted); font-size: 10.5px; }
+
+.kbd-hint { margin-top: 12px; color: var(--faint); font-size: 9.5px; text-align: center; }
+kbd {
+  display: inline-block;
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-bottom-color: rgba(148, 163, 184, .3);
+  border-radius: 4px;
+  background: rgba(148, 163, 184, .06);
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+@media (max-width: 980px) {
+  .app { padding: 28px 18px 24px; }
+  .viz { grid-template-columns: 1fr; }
+  .inspector { position: static; }
+  .controls { top: 8px; }
+  .bits { max-width: 620px; }
+}
+
+@media (max-width: 640px) {
+  .app { padding: 20px 13px 22px; }
+  .hero { padding-top: 4px; }
+  h1 { font-size: clamp(2rem, 12vw, 2.9rem); }
+  .lede { font-size: 13.5px; }
+  .input-panel { padding: 15px; }
+  .input-row { flex-wrap: wrap; }
+  #value-input { flex: 1 1 100%; }
+  .input-row .btn { flex: 1; }
+  .hint-row { flex-direction: column; gap: 4px; }
+  .error { text-align: left; }
+  .controls { padding: 10px; }
+  .controls-row { flex-direction: column; align-items: stretch; gap: 9px; }
+  .controls-left { justify-content: space-between; }
+  .controls-right { justify-content: space-between; }
+  .btn-play { flex: 1; }
+  .step { grid-template-columns: 25px minmax(0, 1fr); gap: 8px; scroll-margin-top: 132px; }
+  .step-marker { width: 25px; height: 25px; flex-basis: 25px; font-size: 9px; }
+  .step-card { padding: 11px 12px; }
+  .step.is-active .step-card { padding: 12px 12px 14px; }
+  .step-title { font-size: 13.5px; }
+  .metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
+  .metric { padding: 7px 2px 6px; }
+  .metric span { font-size: 6.5px; letter-spacing: .02em; }
+  .metric strong { font-size: 11px; }
+  .bit { height: 18px; font-size: 8.5px; border-radius: 3px; }
+  .bit-cells { gap: 2px; }
+  .bit-row { grid-template-columns: 16px minmax(0, 1fr) 16px; gap: 2px; }
+  .bit-idx { font-size: 7px; }
+  .compare-grid { grid-template-columns: 1fr; gap: 6px; }
+  .compare-op { text-align: left; padding: 2px 0; font-size: 20px; }
+  .calc-stack span { flex-basis: 38px; }
+  .calc-stack code { font-size: 10.5px; }
+  .pow-row { grid-template-columns: 42px 46px minmax(0, 1fr); gap: 5px; font-size: 9px; }
+  .pow-row code { font-size: 9px; }
+  .result-number { font-size: 3.2rem; }
+  .footer { flex-direction: column; }
+}
+
+@media (max-width: 380px) {
+  .bit { height: 16px; font-size: 8px; }
+  .bit-idx { display: none; }
+  .bit-row { grid-template-columns: minmax(0, 1fr); }
+  .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="hero">
+    <div class="eyebrow"><span class="dot-live"></span> u64 · constant-time integer algorithm</div>
+    <h1>How many decimal digits?</h1>
+    <p class="lede">
+      Algorithm 1 estimates <code>log10(v)</code> from the bit length, then fixes the answer with one comparison.
+      No floating point. No loops. Exact for every unsigned 64-bit integer.
+    </p>
+    <div class="hero-formula">
+      <code>digits = 1 + ⌊(63 − clz(v)) × 77 / 256⌋ + [v ≥ 10<sup>a+1</sup>]</code>
+    </div>
+  </header>
+
+  <section class="input-panel card" aria-labelledby="input-title">
+    <form id="input-form" novalidate>
+      <label for="value-input" id="input-title">Enter an unsigned 64-bit integer</label>
+      <div class="input-row">
+        <input id="value-input" name="value" type="text" inputmode="numeric" autocomplete="off"
+               spellcheck="false" placeholder="e.g. 123456" value="123456"
+               aria-describedby="range-hint input-error">
+        <button type="submit" class="btn btn-primary">Visualize</button>
+        <button type="button" id="random-btn" class="btn">Random</button>
+      </div>
+      <div class="hint-row">
+        <span id="range-hint">Range: <code>0</code> to <code>18,446,744,073,709,551,615</code></span>
+        <span id="input-error" class="error" role="alert" aria-live="polite"></span>
+      </div>
+      <div class="examples" id="examples" aria-label="Example values">
+        <span class="examples-label">Try</span>
+        <button type="button" data-value="0">0</button>
+        <button type="button" data-value="9">9</button>
+        <button type="button" data-value="10">10</button>
+        <button type="button" data-value="999">999</button>
+        <button type="button" data-value="123456">123,456</button>
+        <button type="button" data-value="9007199254740993">2^53 + 1</button>
+        <button type="button" data-value="18446744073709551615">u64 max</button>
+      </div>
+    </form>
+  </section>
+
+  <main id="viz" class="viz" hidden>
+    <section class="inspector card" id="inspector" aria-label="Value inspector">
+      <div class="card-head">
+        <span class="kicker">v</span>
+        <span class="card-sub">unsigned 64-bit</span>
+        <span class="fit-badge">fits u64</span>
+      </div>
+
+      <div class="value-display" id="value-display">123456</div>
+
+      <div class="value-meta">
+        <div><span>hex</span><code id="hex-display">0x000000000001E240</code></div>
+        <div><span>type</span><code>u64</code></div>
+      </div>
+
+      <div class="bits-block">
+        <div class="bits-head"><span>64-bit binary</span><span>MSB → LSB</span></div>
+        <div id="bits" class="bits" role="img" aria-label="64-bit binary representation"></div>
+        <div class="bit-legend">
+          <span><i class="swatch leading"></i> leading zeros</span>
+          <span><i class="swatch highest"></i> highest set bit</span>
+        </div>
+      </div>
+
+      <div class="metrics" aria-label="Computed values">
+        <div class="metric" data-metric="clz"><span>clz(v)</span><strong id="m-clz">—</strong></div>
+        <div class="metric" data-metric="b"><span>b = 63 − clz</span><strong id="m-b">—</strong></div>
+        <div class="metric" data-metric="a"><span>a</span><strong id="m-a">—</strong></div>
+        <div class="metric" data-metric="cmp"><span>cmp</span><strong id="m-cmp">—</strong></div>
+        <div class="metric" data-metric="digits"><span>digits</span><strong id="m-digits">—</strong></div>
+      </div>
+
+      <div class="inspector-note">
+        <code>pow10[a]</code> stores <code>10<sup>a+1</sup></code>, because the table starts at <code>10</code>.
+      </div>
+    </section>
+
+    <section class="timeline-panel" aria-label="Step-by-step algorithm">
+      <div class="controls card" id="controls">
+        <div class="controls-row">
+          <div class="controls-left">
+            <button type="button" id="prev-btn" class="btn btn-icon" aria-label="Previous step">←</button>
+            <button type="button" id="play-btn" class="btn btn-play">▶ Play</button>
+            <button type="button" id="next-btn" class="btn btn-icon" aria-label="Next step">→</button>
+            <button type="button" id="reset-btn" class="btn btn-ghost">Reset</button>
+          </div>
+          <div class="controls-right">
+            <span id="step-counter" class="step-counter" aria-live="polite">Step 1 / 7</span>
+            <label class="speed-label">Speed
+              <select id="speed">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="progress-track" aria-hidden="true"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+
+      <div id="steps" class="steps"></div>
+
+      <p class="kbd-hint">Keyboard: <kbd>←</kbd> <kbd>→</kbd> to step, <kbd>space</kbd> to play/pause.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Every number is handled with JavaScript <code>BigInt</code> — no precision loss.</span>
+    <span>Visualization of <code>countDigitsLog2</code> from <code>div.zig</code>.</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const U64_MAX = (1n << 64n) - 1n;
+  const POW10 = Array.from({ length: 19 }, (_, i) => 10n ** BigInt(i + 1));
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  const els = {
+    form: $('#input-form'),
+    input: $('#value-input'),
+    error: $('#input-error'),
+    randomBtn: $('#random-btn'),
+    examples: $('#examples'),
+    viz: $('#viz'),
+    inspector: $('#inspector'),
+    valueDisplay: $('#value-display'),
+    hexDisplay: $('#hex-display'),
+    bits: $('#bits'),
+    mClz: $('#m-clz'),
+    mB: $('#m-b'),
+    mA: $('#m-a'),
+    mCmp: $('#m-cmp'),
+    mDigits: $('#m-digits'),
+    steps: $('#steps'),
+    prevBtn: $('#prev-btn'),
+    playBtn: $('#play-btn'),
+    nextBtn: $('#next-btn'),
+    resetBtn: $('#reset-btn'),
+    speed: $('#speed'),
+    counter: $('#step-counter'),
+    progress: $('#progress-fill'),
+  };
+
+  const state = {
+    model: null,
+    steps: [],
+    current: 0,
+    playing: false,
+    timer: null,
+    speed: 1,
+    reveal: {},
+  };
+
+  // ---------- number helpers ----------
+
+  function groupDigits(s) {
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function fmt(v) {
+    return groupDigits(v.toString());
+  }
+
+  function hex64(v) {
+    return '0x' + v.toString(16).toUpperCase().padStart(16, '0');
+  }
+
+  function binary64(v) {
+    return v.toString(2).padStart(64, '0');
+  }
+
+  // Count leading zeros in a 64-bit word. clz(0) is 64 by convention.
+  function clz64(v) {
+    if (v === 0n) return 64;
+    let n = 0;
+    let mask = 1n << 63n;
+    while ((v & mask) === 0n) {
+      n += 1;
+      mask >>= 1n;
+    }
+    return n;
+  }
+
+  function formatFraction(x) {
+    return x.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  function parseU64(raw) {
+    const cleaned = String(raw).replace(/[\s,_]/g, '');
+    if (!cleaned) return { error: 'Enter a number first.' };
+    if (!/^\d+$/.test(cleaned)) {
+      return { error: 'Only digits 0–9 are allowed. Commas and spaces are ignored.' };
+    }
+    let value;
+    try {
+      value = BigInt(cleaned);
+    } catch {
+      return { error: 'That is not a valid integer.' };
+    }
+    if (value > U64_MAX) {
+      return { error: 'Too large for u64. Maximum is ' + fmt(U64_MAX) + '.' };
+    }
+    return { value };
+  }
+
+  // ---------- algorithm 1 ----------
+
+  function computeModel(v) {
+    const isZero = v === 0n;
+    const clz = clz64(v);
+    const b = isZero ? null : 63 - clz;
+    const a = isZero ? null : Number((BigInt(b) * 77n) / 256n);
+    const threshold = isZero ? null : POW10[a];
+    const cmp = isZero ? null : v >= threshold;
+    const digits = isZero ? 1 : 1 + a + (cmp ? 1 : 0);
+    const trueExponent = isZero ? null : a + (cmp ? 1 : 0);
+
+    return {
+      v,
+      decimal: v.toString(),
+      hex: hex64(v),
+      binary: binary64(v),
+      isZero,
+      clz,
+      b,
+      a,
+      threshold,
+      cmp,
+      digits,
+      trueExponent,
+    };
+  }
+
+  // ---------- step content ----------
+
+  function makeSteps(m) {
+    const steps = [];
+
+    steps.push({
+      key: 'input',
+      title: 'Read the input',
+      summary: 'v = ' + fmt(m.v),
+      duration: 1500,
+      body: `
+        <div class="step-lead">Treat the input as an unsigned 64-bit integer.</div>
+        <div class="fact-row">
+          <div class="fact"><span>decimal</span><code>${fmt(m.v)}</code></div>
+          <div class="fact"><span>hex</span><code>${m.hex}</code></div>
+        </div>
+        <p class="note">The value is inside <code>0 &le; v &le; ${fmt(U64_MAX)}</code>, so no clamping or overflow handling is needed.</p>
+      `,
+    });
+
+    steps.push({
+      key: 'zero',
+      title: 'Zero check',
+      summary: m.isZero ? 'v = 0 → return 1' : 'v ≠ 0 → continue',
+      duration: m.isZero ? 1900 : 1300,
+      body: m.isZero ? `
+        <div class="check-row"><code>v == 0</code><span class="bool true">true</span></div>
+        <p class="note">The function returns <strong>1</strong> immediately. No <code>clz</code>, multiplication, or table lookup is needed.</p>
+      ` : `
+        <div class="check-row"><code>v == 0</code><span class="bool false">false</span></div>
+        <p class="note">The early return is skipped, so the bit-length path runs.</p>
+      `,
+    });
+
+    if (!m.isZero) {
+      const lower = 1n << BigInt(m.b);
+      const upper = 1n << BigInt(m.b + 1);
+      const product = BigInt(m.b) * 77n;
+      const fraction = Number(product) / 256;
+
+      steps.push({
+        key: 'clz',
+        title: 'Count leading zeros',
+        summary: 'clz = ' + m.clz + ' → b = ' + m.b,
+        duration: 2400,
+        body: `
+          <div class="step-lead">In the 64-bit word, count the zeros above the highest set bit.</div>
+          <div class="formula-line">
+            <div class="formula-chip"><span>clz(v)</span><strong>${m.clz}</strong></div>
+            <div class="formula-arrow">→</div>
+            <div class="formula-chip accent"><span>b = 63 − clz(v)</span><strong>${m.b}</strong></div>
+          </div>
+          <div class="range-box">
+            <div><span>2<sup>${m.b}</sup></span><code>${fmt(lower)}</code></div>
+            <div class="range-mid">&le; v &lt;</div>
+            <div><span>2<sup>${m.b + 1}</sup></span><code>${fmt(upper)}</code></div>
+          </div>
+          <p class="note"><code>b</code> is the index of the highest set bit. The leading zeros light up in the binary grid on the left.</p>
+        `,
+      });
+
+      steps.push({
+        key: 'estimate',
+        title: 'Estimate the exponent',
+        summary: 'a = ⌊' + m.b + ' × 77 / 256⌋ = ' + m.a,
+        duration: 2100,
+        body: `
+          <div class="step-lead">Approximate the base-10 exponent from <code>b</code>:</div>
+          <div class="calc-stack">
+            <div><span>a</span><code>⌊ b × 77 / 256 ⌋</code></div>
+            <div><span></span><code>= ⌊ ${m.b} × 77 / 256 ⌋</code></div>
+            <div><span></span><code>= ⌊ ${fmt(product)} / 256 ⌋</code></div>
+            <div><span></span><code>= ⌊ ${formatFraction(fraction)} ⌋ = <strong>${m.a}</strong></code></div>
+          </div>
+          <p class="note"><code>77 / 256 = 0.30078125</code> is a slightly low approximation of <code>log10(2) ≈ 0.30103</code>, so <code>a</code> can be at most one below the true exponent.</p>
+        `,
+      });
+
+      const powRows = POW10.map((p, i) => `
+        <div class="pow-row${i === m.a ? ' is-selected' : ''}" data-a="${i}">
+          <span class="pow-a">a = ${i}</span>
+          <span class="pow-exp">10<sup>${i + 1}</sup></span>
+          <code>${fmt(p)}</code>
+        </div>
+      `).join('');
+
+      steps.push({
+        key: 'lookup',
+        title: 'Look up the threshold',
+        summary: '10^' + (m.a + 1) + ' = ' + fmt(m.threshold),
+        duration: 2300,
+        body: `
+          <div class="step-lead">The table is indexed by <code>a</code> and stores the next power of ten, <code>10<sup>a+1</sup></code>:</div>
+          <div class="lookup-highlight">
+            <span class="lookup-label">pow10[${m.a}]</span>
+            <code>10<sup>${m.a + 1}</sup> = ${fmt(m.threshold)}</code>
+          </div>
+          <div class="pow-table" id="pow-table">${powRows}</div>
+          <p class="note">The array starts at <code>10</code>, not <code>1</code>, which is why index <code>a</code> holds <code>10<sup>a+1</sup></code>.</p>
+        `,
+      });
+
+      steps.push({
+        key: 'compare',
+        title: 'Correct with one comparison',
+        summary: 'cmp = ' + (m.cmp ? '1 (true)' : '0 (false)'),
+        duration: 2100,
+        body: `
+          <div class="step-lead">Compare <code>v</code> with that threshold. This tells you whether the estimate lost one:</div>
+          <div class="compare-grid">
+            <div class="compare-value"><span>v</span><code>${fmt(m.v)}</code></div>
+            <div class="compare-op ${m.cmp ? 'is-true' : 'is-false'}">${m.cmp ? '≥' : '&lt;'}</div>
+            <div class="compare-value"><span>threshold</span><code>${fmt(m.threshold)}</code></div>
+          </div>
+          <div class="check-row" style="margin-top:10px">
+            <code>cmp = (v ≥ threshold)</code>
+            <span class="bool ${m.cmp ? 'true' : 'false'}">${m.cmp ? 'true → 1' : 'false → 0'}</span>
+          </div>
+          <p class="note">${m.cmp
+            ? 'The estimate <code>a</code> was one below the true exponent, so the comparison adds 1.'
+            : 'The estimate <code>a</code> already equals the true exponent, so the comparison adds 0.'}</p>
+        `,
+      });
+    }
+
+    const cmpInt = m.isZero ? 0 : (m.cmp ? 1 : 0);
+
+    steps.push({
+      key: 'result',
+      title: 'Result',
+      summary: 'digits = ' + m.digits,
+      duration: 3000,
+      body: m.isZero ? `
+        <div class="result-hero">
+          <span class="result-number">1</span>
+          <span class="result-label">decimal digit</span>
+        </div>
+        <div class="calc-stack">
+          <div><span>early</span><code>v == 0 → 1</code></div>
+        </div>
+        <div class="verify-row">
+          <span>check</span>
+          <code>v.toString().length = 1</code>
+          <span class="bool true">✓ exact</span>
+        </div>
+        <p class="note">Zero is handled before <code>clz</code>. There is no log2 estimate and no table lookup.</p>
+      ` : `
+        <div class="result-hero">
+          <span class="result-number">${m.digits}</span>
+          <span class="result-label">decimal digit${m.digits === 1 ? '' : 's'}</span>
+        </div>
+        <div class="calc-stack">
+          <div><span>digits</span><code>1 + a + cmp</code></div>
+          <div><span></span><code>= 1 + ${m.a} + ${cmpInt}</code></div>
+          <div><span></span><code>= <strong>${m.digits}</strong></code></div>
+        </div>
+        <div class="verify-row">
+          <span>check</span>
+          <code>v.toString().length = ${m.decimal.length}</code>
+          <span class="bool true">✓ exact</span>
+        </div>
+        <p class="note">The true exponent is <code>L = a + cmp = ${m.trueExponent}</code>. The estimate was only ever off by one, and the comparison corrected it. This works for every <code>u64</code> value.</p>
+      `,
+    });
+
+    return steps;
+  }
+
+  // ---------- rendering ----------
+
+  function bitsMarkup(m) {
+    let html = '';
+    for (let row = 0; row < 4; row += 1) {
+      const start = 63 - row * 16;
+      const end = start - 15;
+      html += `<div class="bit-row"><span class="bit-idx">${start}</span><div class="bit-cells">`;
+      for (let i = 0; i < 16; i += 1) {
+        const idx = start - i;
+        const bit = m.binary[63 - idx];
+        const isOne = bit === '1';
+        const isLeading = !m.isZero && idx > m.b;
+        const isHighest = !m.isZero && idx === m.b;
+        const classes = ['bit', isOne ? 'is-one' : 'is-zero'];
+        if (isLeading) classes.push('is-leading');
+        if (isHighest) classes.push('is-highest');
+        const style = isLeading ? ` style="--i:${63 - idx}"` : '';
+        html += `<span class="${classes.join(' ')}" data-index="${idx}" title="bit ${idx}: ${bit}"${style}>${bit}</span>`;
+      }
+      html += `</div><span class="bit-idx">${end}</span></div>`;
+    }
+    return html;
+  }
+
+  function renderInspector(m) {
+    els.valueDisplay.textContent = fmt(m.v);
+    els.valueDisplay.title = m.decimal;
+    els.valueDisplay.classList.toggle('is-long', m.decimal.length > 15);
+    els.hexDisplay.textContent = m.hex;
+    els.bits.innerHTML = bitsMarkup(m);
+    els.bits.classList.toggle('is-zero-value', m.isZero);
+    els.bits.setAttribute('aria-label', '64-bit binary: ' + m.binary);
+  }
+
+  function buildReveal(steps) {
+    const reveal = { clz: Infinity, b: Infinity, a: Infinity, cmp: Infinity, digits: Infinity };
+    steps.forEach((step, i) => {
+      if (step.key === 'clz') { reveal.clz = i; reveal.b = i; }
+      if (step.key === 'estimate') reveal.a = i;
+      if (step.key === 'compare') reveal.cmp = i;
+      if (step.key === 'result') reveal.digits = i;
+    });
+    return reveal;
+  }
+
+  function renderSteps(steps) {
+    els.steps.innerHTML = steps.map((step, i) => `
+      <article class="step is-pending" data-index="${i}" data-key="${step.key}">
+        <div class="step-rail">
+          <span class="step-marker"><span class="step-num">${i + 1}</span></span>
+          <span class="step-line"></span>
+        </div>
+        <div class="step-card">
+          <button type="button" class="step-head" aria-expanded="false" aria-controls="step-body-${i}">
+            <span class="step-kicker">Step ${String(i + 1).padStart(2, '0')}</span>
+            <span class="step-title">${step.title}</span>
+          </button>
+          <div class="step-summary">${step.summary}</div>
+          <div class="step-body" id="step-body-${i}">${step.body}</div>
+        </div>
+      </article>
+    `).join('');
+  }
+
+  function updateMetrics() {
+    const m = state.model;
+    if (!m) return;
+    const values = {
+      clz: m.isZero ? '—' : String(m.clz),
+      b: m.isZero ? '—' : String(m.b),
+      a: m.isZero ? '—' : String(m.a),
+      cmp: m.isZero ? '—' : (m.cmp ? '1' : '0'),
+      digits: String(m.digits),
+    };
+    const nodes = {
+      clz: els.mClz,
+      b: els.mB,
+      a: els.mA,
+      cmp: els.mCmp,
+      digits: els.mDigits,
+    };
+    Object.keys(values).forEach((key) => {
+      const revealed = state.current >= state.reveal[key];
+      nodes[key].textContent = revealed ? values[key] : '—';
+      nodes[key].closest('.metric').classList.toggle('is-revealed', revealed);
+    });
+  }
+
+  function scrollPowTable() {
+    const wrap = $('#pow-table');
+    const row = wrap ? wrap.querySelector('.pow-row.is-selected') : null;
+    if (!wrap || !row) return;
+    const target = row.offsetTop - wrap.clientHeight / 2 + row.offsetHeight / 2;
+    wrap.scrollTo({
+      top: Math.max(0, target),
+      behavior: reduceMotion ? 'auto' : 'smooth',
+    });
+  }
+
+  function setStep(index, opts = {}) {
+    if (!state.steps.length) return;
+    const next = Math.max(0, Math.min(index, state.steps.length - 1));
+    state.current = next;
+    const phase = state.steps[next].key;
+    els.inspector.dataset.phase = phase;
+
+    $$('.step', els.steps).forEach((article, i) => {
+      const active = i === next;
+      const done = i < next;
+      article.classList.toggle('is-active', active);
+      article.classList.toggle('is-done', done);
+      article.classList.toggle('is-pending', !active && !done);
+      const head = $('.step-head', article);
+      if (head) head.setAttribute('aria-expanded', String(active));
+    });
+
+    updateMetrics();
+    updateControls();
+    updateProgress();
+
+    if (opts.scroll !== false) {
+      requestAnimationFrame(() => {
+        const active = $('.step.is-active', els.steps);
+        if (active) {
+          const rect = active.getBoundingClientRect();
+          if (rect.top < 78 || rect.bottom > window.innerHeight - 14) {
+            active.scrollIntoView({
+              behavior: reduceMotion ? 'auto' : 'smooth',
+              block: 'start',
+            });
+          }
+        }
+        if (phase === 'lookup') scrollPowTable();
+      });
+    } else if (phase === 'lookup') {
+      requestAnimationFrame(scrollPowTable);
+    }
+  }
+
+  function updateControls() {
+    els.prevBtn.disabled = state.current <= 0;
+    els.nextBtn.disabled = state.current >= state.steps.length - 1;
+
+    els.playBtn.classList.toggle('is-playing', state.playing);
+    if (state.playing) {
+      els.playBtn.textContent = '❚❚ Pause';
+    } else if (state.current >= state.steps.length - 1) {
+      els.playBtn.textContent = '↻ Replay';
+    } else {
+      els.playBtn.textContent = '▶ Play';
+    }
+
+    els.counter.textContent = 'Step ' + (state.current + 1) + ' / ' + state.steps.length;
+  }
+
+  function updateProgress() {
+    const pct = state.steps.length ? ((state.current + 1) / state.steps.length) * 100 : 0;
+    els.progress.style.width = pct.toFixed(2) + '%';
+  }
+
+  // ---------- playback ----------
+
+  function pause() {
+    state.playing = false;
+    clearTimeout(state.timer);
+    state.timer = null;
+    updateControls();
+  }
+
+  function scheduleNext() {
+    clearTimeout(state.timer);
+    if (!state.playing) return;
+    const duration = (state.steps[state.current]?.duration || 1800) / state.speed;
+    state.timer = setTimeout(() => {
+      if (!state.playing) return;
+      if (state.current < state.steps.length - 1) {
+        setStep(state.current + 1);
+        scheduleNext();
+      } else {
+        state.playing = false;
+        updateControls();
+      }
+    }, duration);
+  }
+
+  function play() {
+    if (!state.steps.length) return;
+    if (state.current >= state.steps.length - 1) setStep(0);
+    state.playing = true;
+    updateControls();
+    scheduleNext();
+  }
+
+  function analyze(value, opts = {}) {
+    pause();
+    const m = computeModel(value);
+    state.model = m;
+    state.steps = makeSteps(m);
+    state.reveal = buildReveal(state.steps);
+    state.current = 0;
+
+    renderInspector(m);
+    renderSteps(state.steps);
+    els.viz.hidden = false;
+    setStep(0, { scroll: false });
+
+    if (opts.autoplay && !reduceMotion) play();
+  }
+
+  // ---------- input ----------
+
+  function clearError() {
+    els.error.textContent = '';
+    els.input.classList.remove('is-invalid', 'shake');
+    els.input.removeAttribute('aria-invalid');
+  }
+
+  function showError(message) {
+    pause();
+    els.error.textContent = message;
+    els.input.classList.add('is-invalid');
+    els.input.setAttribute('aria-invalid', 'true');
+    els.input.classList.remove('shake');
+    void els.input.offsetWidth;
+    els.input.classList.add('shake');
+  }
+
+  function submitValue(raw, opts = {}) {
+    const parsed = parseU64(raw);
+    if (parsed.error) {
+      showError(parsed.error);
+      return false;
+    }
+    clearError();
+    els.input.value = parsed.value.toString();
+    analyze(parsed.value, { autoplay: opts.autoplay !== false });
+    return true;
+  }
+
+  function randomDigits(len) {
+    let s = String(1 + Math.floor(Math.random() * 9));
+    for (let i = 1; i < len; i += 1) s += String(Math.floor(Math.random() * 10));
+    return BigInt(s);
+  }
+
+  function randomU64() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      const words = new Uint32Array(2);
+      window.crypto.getRandomValues(words);
+      return (BigInt(words[0]) << 32n) | BigInt(words[1]);
+    }
+    const hi = BigInt(Math.floor(Math.random() * 0x100000000));
+    const lo = BigInt(Math.floor(Math.random() * 0x100000000));
+    return (hi << 32n) | lo;
+  }
+
+  function randomValue() {
+    const r = Math.random();
+    if (r < 0.30) return randomDigits(1 + Math.floor(Math.random() * 4));
+    if (r < 0.55) return randomDigits(5 + Math.floor(Math.random() * 5));
+    if (r < 0.80) return randomDigits(10 + Math.floor(Math.random() * 9));
+    return randomU64();
+  }
+
+  // ---------- events ----------
+
+  els.form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitValue(els.input.value, { autoplay: true });
+  });
+
+  els.input.addEventListener('input', () => {
+    if (els.error.textContent) clearError();
+  });
+
+  els.randomBtn.addEventListener('click', () => {
+    const v = randomValue();
+    els.input.value = v.toString();
+    submitValue(v.toString(), { autoplay: true });
+  });
+
+  els.examples.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-value]');
+    if (!btn) return;
+    els.input.value = btn.dataset.value;
+    submitValue(btn.dataset.value, { autoplay: true });
+  });
+
+  els.steps.addEventListener('click', (event) => {
+    const head = event.target.closest('.step-head');
+    if (!head) return;
+    const article = head.closest('.step');
+    if (!article) return;
+    pause();
+    setStep(Number(article.dataset.index));
+  });
+
+  els.prevBtn.addEventListener('click', () => {
+    pause();
+    setStep(state.current - 1);
+  });
+
+  els.nextBtn.addEventListener('click', () => {
+    pause();
+    setStep(state.current + 1);
+  });
+
+  els.resetBtn.addEventListener('click', () => {
+    pause();
+    setStep(0);
+  });
+
+  els.playBtn.addEventListener('click', () => {
+    if (state.playing) pause();
+    else play();
+  });
+
+  els.speed.addEventListener('change', () => {
+    state.speed = Number(els.speed.value) || 1;
+    if (state.playing) scheduleNext();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const tag = event.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'A') return;
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      pause();
+      setStep(state.current + 1);
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      pause();
+      setStep(state.current - 1);
+    } else if (event.key === ' ') {
+      event.preventDefault();
+      if (state.playing) pause();
+      else play();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      pause();
+      setStep(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      pause();
+      setStep(state.steps.length - 1);
+    }
+  });
+
+  // Initial demo: visible immediately, but paused so the first step can be read.
+  submitValue(els.input.value || '123456', { autoplay: false });
+})();
+
+</script>
+</body>
+</html>
