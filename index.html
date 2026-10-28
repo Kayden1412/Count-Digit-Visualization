@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step visualization of the constant-time u64 decimal digit counter using log2 and 77/256.">
-<title>Digits via log2 — Algorithm 1 Visualizer</title>
+<meta name="description" content="Step-by-step visualization of constant-time u64 decimal digit counters: the two-table lookup and the log2 × 77/256 method.">
+<title>Counting u64 decimal digits — two-table &amp; log2 visualizer</title>
 <style>
 :root {
   --bg: #060a12;
@@ -286,6 +286,30 @@ h1 {
 .examples button:hover { color: var(--accent); border-color: rgba(94, 234, 212, .4); background: var(--accent-soft); }
 .examples button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+.algo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.algo-row label { margin-bottom: 0; flex: 0 0 auto; }
+#algo {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(3, 7, 18, .6);
+  color: var(--text);
+  padding: 7px 9px;
+  font: 600 11px/1.2 var(--mono);
+  cursor: pointer;
+}
+#algo:hover { border-color: rgba(94, 234, 212, .4); }
+#algo:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ---------- Layout ---------- */
 .viz {
   display: grid;
@@ -473,6 +497,12 @@ h1 {
 }
 .metric.is-revealed { background: rgba(94, 234, 212, .065); border-color: rgba(94, 234, 212, .13); }
 .metric.is-revealed strong { color: var(--accent); }
+.metric.is-wide strong {
+  font-size: 9.5px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  letter-spacing: -.02em;
+}
 .metric[data-metric="digits"].is-revealed { background: var(--lime-soft); border-color: rgba(163, 230, 53, .2); }
 .metric[data-metric="digits"].is-revealed strong { color: var(--lime); }
 
@@ -991,14 +1021,14 @@ kbd {
 <div class="app">
 
   <header class="hero">
-    <div class="eyebrow"><span class="dot-live"></span> u64 · constant-time integer algorithm</div>
+    <div class="eyebrow"><span class="dot-live"></span> u64 · constant-time integer algorithms</div>
     <h1>How many decimal digits?</h1>
-    <p class="lede">
-      Algorithm 1 estimates <code>log10(v)</code> from the bit length, then fixes the answer with one comparison.
-      No floating point. No loops. Exact for every unsigned 64-bit integer.
+    <p class="lede" id="hero-lede">
+      The two-table algorithm counts leading zeros, looks up the decimal length and the boundary for that bit range,
+      then adds the result of one comparison. No loops. Exact for every unsigned 64-bit integer.
     </p>
-    <div class="hero-formula">
-      <code>digits = 1 + ⌊(63 − clz(v)) × 77 / 256⌋ + [v ≥ 10<sup>a+1</sup>]</code>
+    <div class="hero-formula" id="hero-formula">
+      <code>digits = digits[clz(v)] + [v &gt; limit[clz(v)]]</code>
     </div>
   </header>
 
@@ -1015,6 +1045,13 @@ kbd {
       <div class="hint-row">
         <span id="range-hint">Range: <code>0</code> to <code>18,446,744,073,709,551,615</code></span>
         <span id="input-error" class="error" role="alert" aria-live="polite"></span>
+      </div>
+      <div class="algo-row">
+        <label for="algo">Algorithm</label>
+        <select id="algo" name="algorithm">
+          <option value="two" selected>Two lookup tables — clz → D, limit</option>
+          <option value="log2">log2 × 77/256 + one comparison</option>
+        </select>
       </div>
       <div class="examples" id="examples" aria-label="Example values">
         <span class="examples-label">Try</span>
@@ -1055,14 +1092,15 @@ kbd {
 
       <div class="metrics" aria-label="Computed values">
         <div class="metric" data-metric="clz"><span>clz(v)</span><strong id="m-clz">—</strong></div>
-        <div class="metric" data-metric="b"><span>b = 63 − clz</span><strong id="m-b">—</strong></div>
-        <div class="metric" data-metric="a"><span>a</span><strong id="m-a">—</strong></div>
+        <div class="metric" data-metric="b"><span id="label-b">D</span><strong id="m-b">—</strong></div>
+        <div class="metric" data-metric="a"><span id="label-a">L</span><strong id="m-a">—</strong></div>
         <div class="metric" data-metric="cmp"><span>cmp</span><strong id="m-cmp">—</strong></div>
         <div class="metric" data-metric="digits"><span>digits</span><strong id="m-digits">—</strong></div>
       </div>
 
-      <div class="inspector-note">
-        <code>pow10[a]</code> stores <code>10<sup>a+1</sup></code>, because the table starts at <code>10</code>.
+      <div class="inspector-note" id="inspector-note">
+        <code>D = digits[clz]</code> holds the digit count at the bucket's lower bound; <code>L = limit[clz]</code> is
+        <code>10<sup>D</sup> − 1</code>. Row 64 handles zero.
       </div>
     </section>
 
@@ -1098,7 +1136,7 @@ kbd {
 
   <footer class="footer">
     <span>Every number is handled with JavaScript <code>BigInt</code> — no precision loss.</span>
-    <span>Visualization of <code>countDigitsLog2</code> from <code>div.zig</code>.</span>
+    <span id="footer-algo">Visualization of <code>countDigitsTwoTables</code> from <code>div.zig</code>.</span>
   </footer>
 </div>
 
@@ -1110,6 +1148,20 @@ kbd {
   const POW10 = Array.from({ length: 19 }, (_, i) => 10n ** BigInt(i + 1));
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Tables for the two-table algorithm, indexed by clz(v) in 0..64.
+  // digits[clz] is the digit count of 2^b, the lower bound of the bucket.
+  // limit[clz] is 10^digits - 1, so v > limit detects a 10^d boundary crossing.
+  const TWO_DIGITS = new Array(65);
+  const TWO_LIMITS = new Array(65);
+  for (let clz = 0; clz < 64; clz += 1) {
+    const b = 63 - clz;
+    const d = (1n << BigInt(b)).toString().length;
+    TWO_DIGITS[clz] = d;
+    TWO_LIMITS[clz] = 10n ** BigInt(d) - 1n;
+  }
+  TWO_DIGITS[64] = 1; // clz(0) = 64: zero has one digit
+  TWO_LIMITS[64] = 0n;
+
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -1117,6 +1169,7 @@ kbd {
     form: $('#input-form'),
     input: $('#value-input'),
     error: $('#input-error'),
+    algo: $('#algo'),
     randomBtn: $('#random-btn'),
     examples: $('#examples'),
     viz: $('#viz'),
@@ -1124,6 +1177,14 @@ kbd {
     valueDisplay: $('#value-display'),
     hexDisplay: $('#hex-display'),
     bits: $('#bits'),
+    heroLede: $('#hero-lede'),
+    heroFormula: $('#hero-formula'),
+    footerAlgo: $('#footer-algo'),
+    inspectorNote: $('#inspector-note'),
+    labelB: $('#label-b'),
+    labelA: $('#label-a'),
+    metricB: $('[data-metric="b"]'),
+    metricA: $('[data-metric="a"]'),
     mClz: $('#m-clz'),
     mB: $('#m-b'),
     mA: $('#m-a'),
@@ -1140,6 +1201,7 @@ kbd {
   };
 
   const state = {
+    algo: 'two',
     model: null,
     steps: [],
     current: 0,
@@ -1201,7 +1263,7 @@ kbd {
     return { value };
   }
 
-  // ---------- algorithm 1 ----------
+  // ---------- algorithms ----------
 
   function computeModel(v) {
     const isZero = v === 0n;
@@ -1214,6 +1276,7 @@ kbd {
     const trueExponent = isZero ? null : a + (cmp ? 1 : 0);
 
     return {
+      algo: 'log2',
       v,
       decimal: v.toString(),
       hex: hex64(v),
@@ -1229,12 +1292,35 @@ kbd {
     };
   }
 
+  // Two-table algorithm: clz(v) indexes two tables directly.
+  // No zero branch is needed because clz(0) = 64 selects the extra row.
+  function computeModelTwo(v) {
+    const isZero = v === 0n;
+    const clz = clz64(v);
+    const d0 = TWO_DIGITS[clz];
+    const limit = TWO_LIMITS[clz];
+    const cmp = v > limit;
+    const digits = d0 + (cmp ? 1 : 0);
+
+    return {
+      algo: 'two',
+      v,
+      decimal: v.toString(),
+      hex: hex64(v),
+      binary: binary64(v),
+      isZero,
+      clz,
+      d0,
+      limit,
+      cmp,
+      digits,
+    };
+  }
+
   // ---------- step content ----------
 
-  function makeSteps(m) {
-    const steps = [];
-
-    steps.push({
+  function makeInputStep(m) {
+    return {
       key: 'input',
       title: 'Read the input',
       summary: 'v = ' + fmt(m.v),
@@ -1247,7 +1333,12 @@ kbd {
         </div>
         <p class="note">The value is inside <code>0 &le; v &le; ${fmt(U64_MAX)}</code>, so no clamping or overflow handling is needed.</p>
       `,
-    });
+    };
+  }
+
+  function makeSteps(m) {
+    const steps = [];
+    steps.push(makeInputStep(m));
 
     steps.push({
       key: 'zero',
@@ -1326,7 +1417,7 @@ kbd {
             <span class="lookup-label">pow10[${m.a}]</span>
             <code>10<sup>${m.a + 1}</sup> = ${fmt(m.threshold)}</code>
           </div>
-          <div class="pow-table" id="pow-table">${powRows}</div>
+          <div class="pow-table" id="lookup-table">${powRows}</div>
           <p class="note">The array starts at <code>10</code>, not <code>1</code>, which is why index <code>a</code> holds <code>10<sup>a+1</sup></code>.</p>
         `,
       });
@@ -1397,6 +1488,124 @@ kbd {
     return steps;
   }
 
+  function makeStepsTwoTables(m) {
+    const steps = [];
+    steps.push(makeInputStep(m));
+
+    steps.push({
+      key: 'zero',
+      title: 'Zero needs no branch',
+      summary: m.isZero ? 'clz(0) = 64 → row 64 stores D = 1, limit = 0' : 'row 64 makes zero work without a special case',
+      duration: m.isZero ? 2100 : 1500,
+      body: `
+        <div class="check-row"><code>clz(0)</code><span class="bool true">64 by convention</span></div>
+        <p class="note">${m.isZero
+          ? 'For <code>v = 0</code> the leading-zero count is 64. That selects the extra table row, which stores <code>D = 1</code> and <code>limit = 0</code>. The comparison <code>0 &gt; 0</code> is false, so the result is 1.'
+          : 'The same path would also work for <code>v = 0</code>: row 64 stores <code>D = 1</code> and <code>limit = 0</code>. There is no early return and no branch.'}</p>
+        <p class="note">Indexing by <code>clz</code> directly also avoids computing <code>63 − clz</code> or <code>v | 1</code>.</p>
+      `,
+    });
+
+    steps.push({
+      key: 'clz',
+      title: 'Count leading zeros',
+      summary: 'clz = ' + m.clz + ' → table row ' + m.clz,
+      duration: 2300,
+      body: `
+        <div class="step-lead">The hardware instruction <code>clz</code> counts the zeros above the highest set bit.</div>
+        <div class="formula-line">
+          <div class="formula-chip"><span>clz(v)</span><strong>${m.clz}</strong></div>
+          <div class="formula-arrow">→</div>
+          <div class="formula-chip accent"><span>table index</span><strong>${m.clz}</strong></div>
+        </div>
+        ${m.isZero ? `
+          <p class="note"><code>clz(0) = 64</code> is the one index outside <code>0…63</code>. Row 64 is the zero row.</p>
+        ` : `
+          <div class="range-box">
+            <div><span>2<sup>${63 - m.clz}</sup></span><code>${fmt(1n << BigInt(63 - m.clz))}</code></div>
+            <div class="range-mid">&le; v &lt;</div>
+            <div><span>2<sup>${64 - m.clz}</sup></span><code>${fmt(1n << BigInt(64 - m.clz))}</code></div>
+          </div>
+          <p class="note">All values with the same <code>clz</code> share one row. The leading zeros light up in the binary grid on the left.</p>
+        `}
+      `,
+    });
+
+    const rows = TWO_DIGITS.map((d, i) => `
+      <div class="pow-row${i === m.clz ? ' is-selected' : ''}" data-clz="${i}">
+        <span class="pow-a">clz ${i}</span>
+        <span class="pow-exp">D ${d}</span>
+        <code>${fmt(TWO_LIMITS[i])}</code>
+      </div>
+    `).join('');
+
+    steps.push({
+      key: 'lookup',
+      title: 'Look up both tables',
+      summary: 'D = ' + m.d0 + ', limit = ' + fmt(m.limit),
+      duration: 2400,
+      body: `
+        <div class="step-lead">One index, two parallel loads:</div>
+        <div class="lookup-highlight">
+          <span class="lookup-label">digits[${m.clz}]</span><code>D = ${m.d0}</code>
+          <span class="lookup-label">limit[${m.clz}]</span><code>${fmt(m.limit)}</code>
+        </div>
+        <div class="pow-table" id="lookup-table">${rows}</div>
+        <p class="note"><code>D</code> is the digit count of the bucket's lower bound <code>2<sup>b</sup></code>, and <code>limit = 10<sup>D</sup> − 1</code>. Row 64 is the branch-free zero case.</p>
+      `,
+    });
+
+    steps.push({
+      key: 'compare',
+      title: 'Correct with one comparison',
+      summary: 'cmp = v > limit → ' + (m.cmp ? '1 (true)' : '0 (false)'),
+      duration: 2100,
+      body: `
+        <div class="step-lead">If <code>v</code> is above the limit, that bit bucket crossed into the next power of ten:</div>
+        <div class="compare-grid">
+          <div class="compare-value"><span>v</span><code>${fmt(m.v)}</code></div>
+          <div class="compare-op ${m.cmp ? 'is-true' : 'is-false'}">${m.cmp ? '&gt;' : '&le;'}</div>
+          <div class="compare-value"><span>limit[clz]</span><code>${fmt(m.limit)}</code></div>
+        </div>
+        <div class="check-row" style="margin-top:10px">
+          <code>cmp = (v &gt; limit)</code>
+          <span class="bool ${m.cmp ? 'true' : 'false'}">${m.cmp ? 'true → 1' : 'false → 0'}</span>
+        </div>
+        <p class="note">${m.cmp
+          ? 'The bucket starts at <code>D</code> digits and reaches past <code>10<sup>D</sup> − 1</code>, so one is added.'
+          : 'The bucket stays at or below <code>10<sup>D</sup> − 1</code>, so nothing is added.'}</p>
+      `,
+    });
+
+    const cmpInt = m.cmp ? 1 : 0;
+
+    steps.push({
+      key: 'result',
+      title: 'Result',
+      summary: 'digits = ' + m.digits,
+      duration: 3000,
+      body: `
+        <div class="result-hero">
+          <span class="result-number">${m.digits}</span>
+          <span class="result-label">decimal digit${m.digits === 1 ? '' : 's'}</span>
+        </div>
+        <div class="calc-stack">
+          <div><span>digits</span><code>D + cmp</code></div>
+          <div><span></span><code>= ${m.d0} + ${cmpInt}</code></div>
+          <div><span></span><code>= <strong>${m.digits}</strong></code></div>
+        </div>
+        <div class="verify-row">
+          <span>check</span>
+          <code>v.toString().length = ${m.decimal.length}</code>
+          <span class="bool true">✓ exact</span>
+        </div>
+        <p class="note">The tables encode the power-of-ten boundaries directly, so the only correction is one comparison. There is no multiplication and no floating point.${m.isZero ? ' Zero used row 64.' : ''}</p>
+      `,
+    });
+
+    return steps;
+  }
+
   // ---------- rendering ----------
 
   function bitsMarkup(m) {
@@ -1432,11 +1641,15 @@ kbd {
     els.bits.setAttribute('aria-label', '64-bit binary: ' + m.binary);
   }
 
-  function buildReveal(steps) {
+  function buildReveal(steps, algo) {
     const reveal = { clz: Infinity, b: Infinity, a: Infinity, cmp: Infinity, digits: Infinity };
     steps.forEach((step, i) => {
-      if (step.key === 'clz') { reveal.clz = i; reveal.b = i; }
+      if (step.key === 'clz') {
+        reveal.clz = i;
+        if (algo !== 'two') reveal.b = i;
+      }
       if (step.key === 'estimate') reveal.a = i;
+      if (step.key === 'lookup' && algo === 'two') { reveal.b = i; reveal.a = i; }
       if (step.key === 'compare') reveal.cmp = i;
       if (step.key === 'result') reveal.digits = i;
     });
@@ -1465,7 +1678,14 @@ kbd {
   function updateMetrics() {
     const m = state.model;
     if (!m) return;
-    const values = {
+    const two = m.algo === 'two';
+    const values = two ? {
+      clz: String(m.clz),
+      b: String(m.d0),
+      a: fmt(m.limit),
+      cmp: m.cmp ? '1' : '0',
+      digits: String(m.digits),
+    } : {
       clz: m.isZero ? '—' : String(m.clz),
       b: m.isZero ? '—' : String(m.b),
       a: m.isZero ? '—' : String(m.a),
@@ -1482,12 +1702,14 @@ kbd {
     Object.keys(values).forEach((key) => {
       const revealed = state.current >= state.reveal[key];
       nodes[key].textContent = revealed ? values[key] : '—';
-      nodes[key].closest('.metric').classList.toggle('is-revealed', revealed);
+      const box = nodes[key].closest('.metric');
+      box.classList.toggle('is-revealed', revealed);
+      if (key === 'a') box.classList.toggle('is-wide', two);
     });
   }
 
-  function scrollPowTable() {
-    const wrap = $('#pow-table');
+  function scrollLookupTable() {
+    const wrap = $('#lookup-table');
     const row = wrap ? wrap.querySelector('.pow-row.is-selected') : null;
     if (!wrap || !row) return;
     const target = row.offsetTop - wrap.clientHeight / 2 + row.offsetHeight / 2;
@@ -1530,10 +1752,10 @@ kbd {
             });
           }
         }
-        if (phase === 'lookup') scrollPowTable();
+        if (phase === 'lookup') scrollLookupTable();
       });
     } else if (phase === 'lookup') {
-      requestAnimationFrame(scrollPowTable);
+      requestAnimationFrame(scrollLookupTable);
     }
   }
 
@@ -1591,12 +1813,50 @@ kbd {
     scheduleNext();
   }
 
+  // ---------- algorithm UI ----------
+
+  const ALGO_UI = {
+    two: {
+      lede: 'The two-table algorithm counts leading zeros, looks up the decimal length and the boundary for that bit range, then adds the result of one comparison. No loops. Exact for every unsigned 64-bit integer.',
+      formula: '<code>digits = digits[clz(v)] + [v &gt; limit[clz(v)]]</code>',
+      labelB: 'D',
+      labelA: 'L',
+      note: '<code>D = digits[clz]</code> holds the digit count at the bucket\'s lower bound; <code>L = limit[clz]</code> is <code>10<sup>D</sup> − 1</code>. Row 64 handles zero.',
+      footer: 'Visualization of <code>countDigitsTwoTables</code> from <code>div.zig</code>.',
+    },
+    log2: {
+      lede: 'Algorithm 1 estimates <code>log10(v)</code> from the bit length, then fixes the answer with one comparison. No floating point. No loops. Exact for every unsigned 64-bit integer.',
+      formula: '<code>digits = 1 + ⌊(63 − clz(v)) × 77 / 256⌋ + [v ≥ 10<sup>a+1</sup>]</code>',
+      labelB: 'b = 63 − clz',
+      labelA: 'a',
+      note: '<code>pow10[a]</code> stores <code>10<sup>a+1</sup></code>, because the table starts at <code>10</code>.',
+      footer: 'Visualization of <code>countDigitsLog2</code> from <code>div.zig</code>.',
+    },
+  };
+
+  function applyAlgoUI() {
+    const ui = ALGO_UI[state.algo];
+    els.heroLede.innerHTML = ui.lede;
+    els.heroFormula.innerHTML = ui.formula;
+    els.labelB.textContent = ui.labelB;
+    els.labelA.textContent = ui.labelA;
+    els.metricB.title = state.algo === 'two'
+      ? 'D = digits[clz(v)]'
+      : 'b = 63 − clz(v)';
+    els.metricA.title = state.algo === 'two'
+      ? 'L = limit[clz(v)]'
+      : 'a = floor(b × 77 / 256)';
+    els.inspectorNote.innerHTML = ui.note;
+    els.footerAlgo.innerHTML = ui.footer;
+  }
+
   function analyze(value, opts = {}) {
     pause();
-    const m = computeModel(value);
+    const two = state.algo === 'two';
+    const m = two ? computeModelTwo(value) : computeModel(value);
     state.model = m;
-    state.steps = makeSteps(m);
-    state.reveal = buildReveal(state.steps);
+    state.steps = two ? makeStepsTwoTables(m) : makeSteps(m);
+    state.reveal = buildReveal(state.steps, state.algo);
     state.current = 0;
 
     renderInspector(m);
@@ -1667,6 +1927,12 @@ kbd {
   els.form.addEventListener('submit', (event) => {
     event.preventDefault();
     submitValue(els.input.value, { autoplay: true });
+  });
+
+  els.algo.addEventListener('change', () => {
+    state.algo = els.algo.value === 'log2' ? 'log2' : 'two';
+    applyAlgoUI();
+    if (state.model) analyze(state.model.v, { autoplay: false });
   });
 
   els.input.addEventListener('input', () => {
@@ -1749,6 +2015,8 @@ kbd {
   });
 
   // Initial demo: visible immediately, but paused so the first step can be read.
+  state.algo = els.algo.value === 'log2' ? 'log2' : 'two';
+  applyAlgoUI();
   submitValue(els.input.value || '123456', { autoplay: false });
 })();
 
